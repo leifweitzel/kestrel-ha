@@ -1,0 +1,37 @@
+name: Kestrel
+version: "0.2.0"
+slug: kestrel
+description: Time-shift helper for a daily recorded stream.
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+init: false
+homeassistant_api: true
+map:
+  - media:rw
+ports:
+  8765/tcp: 8765
+ports_description:
+  8765/tcp: Playback and status endpoint
+options:
+  stream_url: ""
+  start_time: "18:00"
+  duration_minutes: 150
+  keep_hours: 36
+  timezone: "Europe/Berlin"
+  delay_seconds: 20
+  part1_to: "18:30"
+  part2_to: "18:50"
+  part2_switch: ""
+schema:
+  stream_url: str
+  start_time: match(^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$)
+  duration_minutes: int(1,600)
+  keep_hours: int(1,240)
+  timezone: str
+  delay_seconds: int(0,120)
+  part1_to: match(^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$)
+  part2_to: match(^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$)
+  part2_switch: str?
