@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -143,7 +144,9 @@ def build(press_url, text, workdir):
             "-map", "[out]", "-b:a", "96k", "-ar", "44100", "-ac", "1", os.path.join(workdir, "out.mp3")]
     subprocess.run(cmd, check=True)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    os.replace(os.path.join(workdir, "out.mp3"), OUT)
+    staging = OUT + ".part"  # same directory/device as OUT, so the final rename is atomic
+    shutil.copyfile(os.path.join(workdir, "out.mp3"), staging)
+    os.replace(staging, OUT)
 
 
 def in_window(now):
