@@ -194,6 +194,9 @@ def tick():
     key = hashlib.sha1(f"{url}|{text}".encode()).hexdigest()
     if read_state().get("key") == key and os.path.exists(OUT):
         publish(title, bool(text))  # keeps the sensor alive after a Home Assistant restart
+        if PUBLIC_DIR and not os.path.exists(os.path.join(PUBLIC_DIR, "morgen.mp3")):
+            os.makedirs(PUBLIC_DIR, exist_ok=True)
+            shutil.copyfile(OUT, os.path.join(PUBLIC_DIR, "morgen.mp3"))
         return
     log(f"building: {title}; summary {'yes' if text else 'no'} ({len(text)} chars)")
     with tempfile.TemporaryDirectory() as workdir:
