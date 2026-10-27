@@ -297,6 +297,8 @@ def main():
     os.makedirs(REC_DIR, exist_ok=True)
     log(f"start: {START_TIME} for {DURATION_MIN} min, parts to {PART1_TO}/{PART2_TO}, delay {DELAY}s")
     threading.Thread(target=scheduler, daemon=True).start()
+    import morning  # optional second job, enabled via MORNING_FEED
+    threading.Thread(target=morning.run, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
 
