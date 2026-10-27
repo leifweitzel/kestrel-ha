@@ -1,5 +1,5 @@
 name: Kestrel
-version: "0.2.0"
+version: "0.3.0"
 slug: kestrel
 description: Time-shift helper for a daily recorded stream.
 arch:

@@ -37,6 +37,12 @@ CHUNK = 16 * 1024
 state = {"recording": None}
 state_lock = threading.Lock()
 
+# Players treat a stream that ends as a dropout and reconnect. After a client has
+# received everything it is entitled to, it gets "410 Gone" for a short while
+# instead of the recording from the beginning again.
+FINISHED_LOCK_SECONDS = 180
+finished = {}
+
 
 def log(msg):
     print(f"[{datetime.now(TZ):%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
@@ -259,6 +265,9 @@ class Handler(BaseHTTPRequestHandler):
         target = latest_file()
         if not target:
             return self.send_error(404, "no recording")
+        client = self.client_address[0]
+        if not raw and time.time() - finished.get(client, 0) < FINISHED_LOCK_SECONDS:
+            return self.send_error(410, "already played")
         self.send_response(200)
         self.send_header("Content-Type", "audio/mpeg")
         self.send_header("Cache-Control", "no-store")
@@ -277,9 +286,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.copy_range(f, target, 0)
                     return
                 pos, done = self.copy_range(f, target, 0, p1)
-                if p2 is None or not done or not part2_wanted():
-                    return
-                self.copy_range(f, target, pos, p2, keep_going=part2_wanted)
+                if done and p2 is not None and part2_wanted():
+                    self.copy_range(f, target, pos, p2, keep_going=part2_wanted)
+                finished[client] = time.time()
         except (BrokenPipeError, ConnectionResetError):
             pass
 
