@@ -184,6 +184,7 @@ def tick():
     text = todays_text()
     key = hashlib.sha1(f"{url}|{text}".encode()).hexdigest()
     if read_state().get("key") == key and os.path.exists(OUT):
+        publish(title, bool(text))  # keeps the sensor alive after a Home Assistant restart
         return
     log(f"building: {title}; summary {'yes' if text else 'no'} ({len(text)} chars)")
     with tempfile.TemporaryDirectory() as workdir:
@@ -192,6 +193,13 @@ def tick():
         json.dump({"key": key, "title": title}, f)
     publish(title, bool(text))
     log(f"done: {os.path.getsize(OUT)} bytes")
+
+
+def build_now():
+    """Manual run (POST /morning/build), ignores the weekday window."""
+    if not FEED:
+        raise RuntimeError("disabled (no feed configured)")
+    tick()
 
 
 def run():

@@ -191,6 +191,24 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         log("http " + fmt % args)
 
+    def do_POST(self):
+        if self.path == "/morning/build":
+            try:
+                import morning
+                morning.build_now()
+                body = b'{"ok": true}'
+                code = 200
+            except Exception as exc:  # noqa: BLE001
+                body = json.dumps({"ok": False, "error": str(exc)}).encode()
+                code = 500
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_error(404)
+
     def do_HEAD(self):
         self.serve(head=True)
 
