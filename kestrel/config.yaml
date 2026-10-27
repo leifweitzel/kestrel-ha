@@ -1,5 +1,5 @@
 name: Kestrel
-version: "0.4.4"
+version: "0.4.5"
 slug: kestrel
 description: Time-shift helper for a daily recorded stream.
 arch:
@@ -33,6 +33,7 @@ options:
   morning_todo: ""
   morning_tts_engine: "tts.home_assistant_cloud"
   morning_public_dir: ""
+  morning_from: "08:00"
 schema:
   stream_url: str
   start_time: match(^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$)
@@ -48,3 +49,4 @@ schema:
   morning_todo: str?
   morning_tts_engine: str?
   morning_public_dir: str?
+  morning_from: match(^([01][0-9]|2[0-3]):[0-5][0-9]$)?
