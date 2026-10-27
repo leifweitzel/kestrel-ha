@@ -29,6 +29,7 @@ OUT = os.environ.get("MORNING_OUT", "/media/kestrel/morgen.mp3")
 STATE_FILE = OUT + ".state"
 FROM_TIME = os.environ.get("MORNING_FROM", "06:30")
 TO_TIME = os.environ.get("MORNING_TO", "09:00")
+PUBLIC_DIR = os.environ.get("MORNING_PUBLIC_DIR", "").replace("null", "")
 SENSOR = os.environ.get("MORNING_SENSOR", "sensor.kestrel_morgen")
 TZ = ZoneInfo(os.environ.get("TZ_NAME", "Europe/Berlin"))
 HA_API = os.environ.get("HA_API", "http://supervisor/core/api")
@@ -147,6 +148,11 @@ def build(press_url, text, workdir):
     staging = OUT + ".part"  # same directory/device as OUT, so the final rename is atomic
     shutil.copyfile(os.path.join(workdir, "out.mp3"), staging)
     os.replace(staging, OUT)
+    if PUBLIC_DIR:
+        os.makedirs(PUBLIC_DIR, exist_ok=True)
+        target = os.path.join(PUBLIC_DIR, "morgen.mp3")
+        shutil.copyfile(OUT, target + ".part")
+        os.replace(target + ".part", target)
 
 
 def in_window(now):

@@ -12,6 +12,7 @@ export MORNING_FEED="$(bashio::config 'morning_feed')"
 export MORNING_FILTER="$(bashio::config 'morning_filter')"
 export MORNING_TODO="$(bashio::config 'morning_todo')"
 export MORNING_TTS_ENGINE="$(bashio::config 'morning_tts_engine')"
+export MORNING_PUBLIC_DIR="$(bashio::config 'morning_public_dir')"
 export MORNING_OUT="/media/kestrel/morgen.mp3"
 export REC_DIR="/media/kestrel"
 if [ -z "${STREAM_URL}" ]; then
