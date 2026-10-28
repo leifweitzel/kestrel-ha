@@ -12,6 +12,7 @@
 import bisect
 import json
 import os
+import re
 import threading
 import time
 import urllib.request
@@ -68,11 +69,14 @@ def file_for(day):
     return os.path.join(REC_DIR, f"{day:%Y-%m-%d}.mp3")
 
 
+REC_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}\.(mp3|idx)$")  # only the daily recordings, no other files
+
+
 def cleanup():
     cutoff = time.time() - KEEP_HOURS * 3600
     for name in os.listdir(REC_DIR):
         path = os.path.join(REC_DIR, name)
-        if name.endswith((".mp3", ".idx")) and os.path.getmtime(path) < cutoff:
+        if REC_NAME.match(name) and os.path.getmtime(path) < cutoff:
             os.remove(path)
             log(f"deleted {name}")
 
@@ -130,7 +134,7 @@ def scheduler():
 
 
 def latest_file():
-    files = sorted(f for f in os.listdir(REC_DIR) if f.endswith(".mp3"))
+    files = sorted(f for f in os.listdir(REC_DIR) if re.match(r"^\d{4}-\d{2}-\d{2}\.mp3$", f))
     return os.path.join(REC_DIR, files[-1]) if files else None
 
 
