@@ -8,10 +8,10 @@
     part 1: start .. PART1_TO
     part 2: PART1_TO .. PART2_TO, only when the Home Assistant entity
             PART2_SWITCH is "on"; switching it off while it plays ends part 2
-    part 3: PART3_FROM .. end of the recording, only when part 2 was skipped
-            (switch off beforehand or during part 2). Everything between
-            PART2_TO and PART3_FROM (the news) is never sent.
-  If part 2 ran to its end, the stream ends there (as before).
+    part 3: PART3_FROM .. end of the recording. It follows part 2 whether part 2
+            ran to its end, was skipped beforehand or was skipped while it
+            played. Everything between PART2_TO and PART3_FROM (the news) is
+            never sent. Without PART3_FROM the stream ends after part 2.
 - Replay lock: after a stream has been delivered completely, the same player
   gets "410 Gone" instead of the recording from the beginning again. Callers
   that add a unique "?s=<value>" to the URL are locked per value for hours
@@ -340,14 +340,14 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 pos, done = self.copy_range(f, target, 0, p1)
                 if done:
-                    skipped = True  # part 2 not played (or cut): continue with part 3
+                    proceed = True
                     if p2 is not None and part2_wanted():
                         pos, done2 = self.copy_range(f, target, pos, p2, keep_going=part2_wanted)
-                        skipped = (not done2) and (not part2_wanted())
-                    elif p2 is None:
-                        skipped = False
-                    if skipped and p3 is not None:
-                        log("part 2 skipped: continuing with the program from " + PART3_FROM)
+                        # ran to its end or was skipped by the switch: carry on;
+                        # any other end (stalled recording) just ends the stream
+                        proceed = done2 or not part2_wanted()
+                    if proceed and p2 is not None and p3 is not None:
+                        log("continuing with the program from " + PART3_FROM)
                         off = wait_offset(target, p3, WAIT_FOR_PART3_SECONDS)
                         if off is not None:
                             self.copy_range(f, target, off)
