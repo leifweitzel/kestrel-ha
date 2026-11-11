@@ -4,9 +4,19 @@
   together with a small index (wall clock -> byte offset).
 - Playback: GET /today.mp3 returns the latest recording from the beginning and
   keeps following the file while it is still growing. The playback is composed
-  of two parts (start..PART1_TO, PART1_TO..PART2_TO). The second part is only
-  sent when the Home Assistant entity PART2_SWITCH is "on"; switching it off while the
-  second part plays ends the stream. Everything after PART2_TO is never sent.
+  of up to three parts:
+    part 1: start .. PART1_TO
+    part 2: PART1_TO .. PART2_TO, only when the Home Assistant entity
+            PART2_SWITCH is "on"; switching it off while it plays ends part 2
+    part 3: PART3_FROM .. end of the recording, only when part 2 was skipped
+            (switch off beforehand or during part 2). Everything between
+            PART2_TO and PART3_FROM (the news) is never sent.
+  If part 2 ran to its end, the stream ends there (as before).
+- Replay lock: after a stream has been delivered completely, the same player
+  gets "410 Gone" instead of the recording from the beginning again. Callers
+  that add a unique "?s=<value>" to the URL are locked per value for hours
+  (so a player that keeps retrying the same URL is never restarted), while a
+  new value starts a fresh playback. Without "s" the old 180 second lock applies.
 - Old recordings are deleted after KEEP_HOURS hours.
 """
 import bisect
@@ -18,6 +28,7 @@ import time
 import urllib.request
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 STREAM_URL = os.environ["STREAM_URL"]
@@ -28,6 +39,9 @@ TZ = ZoneInfo(os.environ.get("TZ_NAME", "Europe/Berlin"))
 DELAY = int(os.environ.get("DELAY_SECONDS", "0"))
 PART1_TO = os.environ.get("PART1_TO", "")
 PART2_TO = os.environ.get("PART2_TO", "")
+PART3_FROM = os.environ.get("PART3_FROM", "")
+if PART3_FROM in ("null", "None"):
+    PART3_FROM = ""
 PART2_SWITCH = os.environ.get("PART2_SWITCH", "")
 REC_DIR = os.environ.get("REC_DIR", "/media/kestrel")
 PORT = int(os.environ.get("PORT", "8765"))
@@ -39,9 +53,11 @@ state = {"recording": None}
 state_lock = threading.Lock()
 
 # Players treat a stream that ends as a dropout and reconnect. After a client has
-# received everything it is entitled to, it gets "410 Gone" for a short while
-# instead of the recording from the beginning again.
-FINISHED_LOCK_SECONDS = 180
+# received everything it is entitled to, it gets "410 Gone" for a while instead
+# of the recording from the beginning again.
+FINISHED_LOCK_SECONDS = 180          # without ?s=
+SESSION_LOCK_SECONDS = 6 * 3600      # with ?s=<unique value>
+WAIT_FOR_PART3_SECONDS = 30 * 60
 finished = {}
 
 
@@ -170,6 +186,17 @@ def offset_at(path, ts):
     return None if is_active(path) else offsets[-1]
 
 
+def wait_offset(path, ts, timeout):
+    """Waits until the recording has reached wall clock `ts` and returns its offset."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        off = offset_at(path, ts)
+        if off is not None:
+            return off
+        time.sleep(1)
+    return None
+
+
 def part2_wanted():
     if not PART2_SWITCH or not SUPERVISOR_TOKEN:
         return False
@@ -220,7 +247,7 @@ class Handler(BaseHTTPRequestHandler):
         self.serve(head=False)
 
     def serve(self, head):
-        path = self.path.partition("?")[0]
+        path = urlsplit(self.path).path
         if path == "/status":
             return self.status(head)
         if path == "/today.mp3":
@@ -288,7 +315,10 @@ class Handler(BaseHTTPRequestHandler):
         if not target:
             return self.send_error(404, "no recording")
         client = self.client_address[0]
-        if not raw and time.time() - finished.get(client, 0) < FINISHED_LOCK_SECONDS:
+        session = (parse_qs(urlsplit(self.path).query).get("s") or [""])[0]
+        key = (client, session)
+        lock = SESSION_LOCK_SECONDS if session else FINISHED_LOCK_SECONDS
+        if not raw and time.time() - finished.get(key, 0) < lock:
             return self.send_error(410, "already played")
         self.send_response(200)
         self.send_header("Content-Type", "audio/mpeg")
@@ -304,20 +334,31 @@ class Handler(BaseHTTPRequestHandler):
                 day = rec_day(target)
                 p1 = at(day, PART1_TO).timestamp() + DELAY if PART1_TO else None
                 p2 = at(day, PART2_TO).timestamp() + DELAY if PART2_TO else None
+                p3 = at(day, PART3_FROM).timestamp() + DELAY if PART3_FROM else None
                 if p1 is None:
                     self.copy_range(f, target, 0)
                     return
                 pos, done = self.copy_range(f, target, 0, p1)
-                if done and p2 is not None and part2_wanted():
-                    self.copy_range(f, target, pos, p2, keep_going=part2_wanted)
-                finished[client] = time.time()
+                if done:
+                    skipped = True  # part 2 not played (or cut): continue with part 3
+                    if p2 is not None and part2_wanted():
+                        pos, done2 = self.copy_range(f, target, pos, p2, keep_going=part2_wanted)
+                        skipped = (not done2) and (not part2_wanted())
+                    elif p2 is None:
+                        skipped = False
+                    if skipped and p3 is not None:
+                        log("part 2 skipped: continuing with the program from " + PART3_FROM)
+                        off = wait_offset(target, p3, WAIT_FOR_PART3_SECONDS)
+                        if off is not None:
+                            self.copy_range(f, target, off)
+                finished[key] = time.time()
         except (BrokenPipeError, ConnectionResetError):
             pass
 
 
 def main():
     os.makedirs(REC_DIR, exist_ok=True)
-    log(f"start: {START_TIME} for {DURATION_MIN} min, parts to {PART1_TO}/{PART2_TO}, delay {DELAY}s")
+    log(f"start: {START_TIME} for {DURATION_MIN} min, parts to {PART1_TO}/{PART2_TO}, part 3 from {PART3_FROM or '-'}, delay {DELAY}s")
     threading.Thread(target=scheduler, daemon=True).start()
     import morning  # optional second job, enabled via MORNING_FEED
     threading.Thread(target=morning.run, daemon=True).start()
