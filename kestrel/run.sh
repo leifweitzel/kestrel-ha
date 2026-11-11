@@ -7,6 +7,9 @@ export TZ_NAME="$(bashio::config 'timezone')"
 export DELAY_SECONDS="$(bashio::config 'delay_seconds')"
 export PART1_TO="$(bashio::config 'part1_to')"
 export PART2_TO="$(bashio::config 'part2_to')"
+if bashio::config.has_value 'part3_from'; then
+  export PART3_FROM="$(bashio::config 'part3_from')"
+fi
 export PART2_SWITCH="$(bashio::config 'part2_switch')"
 export MORNING_FEED="$(bashio::config 'morning_feed')"
 export MORNING_FILTER="$(bashio::config 'morning_filter')"
